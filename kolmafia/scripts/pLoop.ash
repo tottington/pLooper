@@ -236,7 +236,7 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_useAdvForPvpAtBoxingDaycare</b> - Set to <b>true</b> if you want to spend 1 adv getting pvp fights from boxing daycare.");
     print_html("<b>prusias_ploop_postRunMoonTune</b> - Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign.");
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
-    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo.");
+    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo. <b>cowo</b> is dropped while overdrunk, since Drunkula's wineglass cannot win Coral Corral fights.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
     print_html("<b>prusias_ploop_smokeMessage</b> - Message to write with the campfire smokes before ascension. Leave empty for the default. Set it with <b>ploop smokemessage (your message)</b> rather than by hand. 100 character max; <b>%n</b> is replaced with the smoke number and an <b>&amp;</b> becomes <b>and</b>.");
@@ -930,6 +930,20 @@ boolean yachtzeeAccess() {
     return false;
 }
 
+//cowo sends garbo to The Coral Corral, which an overdrunk character cannot win:
+//Drunkula's wineglass blocks skills and combat items and costs 30 familiar weight.
+string stripCowo(string args) {
+    string out;
+    foreach i, part in split_string(args, " ") {
+        if (part != "cowo" && part != "") {
+            if (out != "")
+                out += " ";
+            out += part;
+        }
+    }
+    return out;
+}
+
 void garboUsage(string x) {
 	print("trying to run garbo","teal");
     if (have_familiar($familiar[Patriotic Eagle])) {
@@ -958,8 +972,13 @@ void garboUsage(string x) {
         garboString += " yachtzeechain";
     if (x != "")
         garboString += " " + x;
-    if (get_property("prusias_ploop_garboAdditionalArg") != "")
-        garboString += " " + get_property("prusias_ploop_garboAdditionalArg");
+    string extraArgs = get_property("prusias_ploop_garboAdditionalArg");
+    if (my_inebriety() > inebriety_limit() && extraArgs.contains_text("cowo")) {
+        extraArgs = stripCowo(extraArgs);
+        print("Overdrunk, so dropping cowo from garbo's arguments.", "teal");
+    }
+    if (extraArgs != "")
+        garboString += " " + extraArgs;
     print("Running garbo with " + garboString);
     cli_execute(garboString);
 }
