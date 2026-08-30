@@ -711,6 +711,15 @@ void utsCodpieceCheck() {
         print("Codpiece loaded: five unblemished pearls will carry into the run.", "blue");
 }
 
+boolean needDinseyTicket() {
+    // cowo farms Coral Corral instead of Barf Mountain, so garbo only needs Dinseylandfill
+    // on the overdrunk leg, where cowo is dropped because the wineglass cannot win those fights
+    if (!get_property("prusias_ploop_garboAdditionalArg").contains_text("cowo")) {
+        return true;
+    }
+    return !get_property("garbo_skipOverdrunkAdventures").to_boolean();
+}
+
 void pre_ascend_pulls() {
     //Acquire Potential CS Pulls
     if (get_property("prusias_ploop_ascensionType") == "" || get_property("prusias_ploop_ascensionType").to_int() < 3) {
@@ -726,7 +735,7 @@ void pre_ascend_pulls() {
             cli_execute("acquire 1 tobiko marble soda");
         if (needToAcquireItem($item[wasabi marble soda]))
             cli_execute("acquire 1 wasabi marble soda");
-        if (!get_property("stenchAirportAlways").to_boolean() && needToAcquireItem($item[one-day ticket to Dinseylandfill]))
+        if (!get_property("stenchAirportAlways").to_boolean() && needDinseyTicket() && needToAcquireItem($item[one-day ticket to Dinseylandfill]))
             cli_execute("acquire 1 one-day ticket to Dinseylandfill");
     }
 
