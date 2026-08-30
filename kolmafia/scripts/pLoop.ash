@@ -64,6 +64,7 @@ prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes.
 prusias_ploop_nightcapMPA = int
 prusias_ploop_garboAdditionalArg = string
 prusias_ploop_breakfastAdditionalScript = string
+prusias_ploop_postDayScript = string
 prusias_ploop_alwaysSteelOrgan = boolean
 
 Smol specific
@@ -238,6 +239,7 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
     print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
+    print_html("<b>prusias_ploop_postDayScript</b> - Will cli_execute whatever this property is set to once the day is finished, just before the end of day ptrack breakpoint is recorded.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
     print_html("<b>prusias_ploop_smokeMessage</b> - Message to write with the campfire smokes before ascension. Leave empty for the default. Set it with <b>ploop smokemessage (your message)</b> rather than by hand. 100 character max; <b>%n</b> is replaced with the smoke number and an <b>&amp;</b> becomes <b>and</b>.");
     print("Disables", "teal");
@@ -1474,6 +1476,19 @@ void runLeg2GarboPhase(boolean halloween) {
     }
 }
 
+void runPostDayScript() {
+    string script = get_property("prusias_ploop_postDayScript");
+    if (script == "") {
+        return;
+    }
+
+    print("Running post day script: " + script, "teal");
+    // capture the result so a failing script does not stop the day before ptrack records it
+    if (!cli_execute(script)) {
+        print("ERROR_PLOOP: Post day script failed: " + script, "red");
+    }
+}
+
 void runNightcapPhase(boolean halloween) {
     if (get_property("ascensionsToday").to_int() != 1) {
         return;
@@ -1490,6 +1505,7 @@ void runNightcapPhase(boolean halloween) {
 
     string breakpoint = halloween ? "halloweenEnd" : "end";
     if (!get_property('thoth19_event_list').contains_text(breakpoint)) {
+        runPostDayScript();
         addBreakpoint(breakpoint);
         cli_execute("ptrack recap");
     }
