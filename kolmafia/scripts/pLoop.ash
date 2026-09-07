@@ -62,6 +62,9 @@ prusias_ploop_postRunMoonTune = int
 prusias_ploop_optOutSmoking = boolean
 prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes. if empty, uses the default
 prusias_ploop_nightcapMPA = int
+prusias_ploop_defaultMPA = int
+prusias_ploop_leg1MPA = int
+prusias_ploop_leg2MPA = int
 prusias_ploop_garboAdditionalArg = string
 prusias_ploop_breakfastAdditionalScript = string
 prusias_ploop_alwaysSteelOrgan = boolean
@@ -236,6 +239,9 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_useAdvForPvpAtBoxingDaycare</b> - Set to <b>true</b> if you want to spend 1 adv getting pvp fights from boxing daycare.");
     print_html("<b>prusias_ploop_postRunMoonTune</b> - Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign.");
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
+    print_html("<b>prusias_ploop_defaultMPA</b> - Your normal valueOfAdventure. Empty disables. valueOfAdventure is set back to this at the end of the day, so it has to be set for either leg MPA below to be used.");
+    print_html("<b>prusias_ploop_leg1MPA</b> - valueOfAdventure to use from the start of the leg 1 garbo phase. Empty leaves valueOfAdventure alone. Requires <b>prusias_ploop_defaultMPA</b>.");
+    print_html("<b>prusias_ploop_leg2MPA</b> - valueOfAdventure to use from the start of the leg 2 garbo phase. Empty leaves valueOfAdventure alone. Requires <b>prusias_ploop_defaultMPA</b>.");
     print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
@@ -351,6 +357,47 @@ void restoreHalloweenMPA() {
     if (get_property("prusias_ploop_preHalloweenMPA") != "" && get_property("valueOfAdventure").to_int() == 9999) {
         set_property("valueOfAdventure", get_property("prusias_ploop_preHalloweenMPA"));
         set_property("prusias_ploop_preHalloweenMPA", "");
+    }
+}
+
+// halloween parks the real MPA in preHalloweenMPA, so the per leg swaps stand down until it has been restored
+boolean mpaSwapBlocked(string pref, string mpa) {
+    if (mpa == "" || get_property("prusias_ploop_preHalloweenMPA") != "") {
+        return true;
+    }
+
+    if (!is_integer(mpa) || mpa.to_int() <= 0) {
+        print("ERROR_PLOOP: " + pref + " must be a positive integer, but it is '" + mpa + "'", "red");
+        return true;
+    }
+
+    return false;
+}
+
+void setLegMPA(string pref) {
+    string mpa = get_property(pref);
+    if (mpaSwapBlocked(pref, mpa)) {
+        return;
+    }
+
+    if (get_property("prusias_ploop_defaultMPA") == "") {
+        print("ERROR_PLOOP: " + pref + " is set but prusias_ploop_defaultMPA is not, so valueOfAdventure would never be restored.", "red");
+        return;
+    }
+
+    print("Setting valueOfAdventure to " + mpa + " for this leg (" + pref + ")", "teal");
+    set_property("valueOfAdventure", mpa);
+}
+
+void restoreDefaultMPA() {
+    string mpa = get_property("prusias_ploop_defaultMPA");
+    if (mpaSwapBlocked("prusias_ploop_defaultMPA", mpa)) {
+        return;
+    }
+
+    if (get_property("valueOfAdventure") != mpa) {
+        print("Restoring valueOfAdventure to " + mpa, "teal");
+        set_property("valueOfAdventure", mpa);
     }
 }
 
@@ -1255,6 +1302,8 @@ void runLeg1GarboPhase(boolean halloween) {
         return;
     }
 
+    setLegMPA("prusias_ploop_leg1MPA");
+
     if (my_inebriety() <= inebriety_limit() && my_adventures() > 0 && my_familiar() != $familiar[Stooper]) {
         if (halloween) {
             cli_execute("CONSUME ALL VALUE 10000");
@@ -1337,6 +1386,7 @@ void runPreAscensionPhase(boolean halloween) {
             if (halloween) {
                 restoreHalloweenMPA();
             }
+            restoreDefaultMPA();
             abort();
         }
         if (!halloween) {
@@ -1457,6 +1507,8 @@ void runLeg2GarboPhase(boolean halloween) {
         return;
     }
 
+    setLegMPA("prusias_ploop_leg2MPA");
+
     if (shouldRunPostRun()) {
         if (halloween) {
             cli_execute("CONSUME ALL VALUE 10000");
@@ -1487,6 +1539,8 @@ void runNightcapPhase(boolean halloween) {
     } else if (get_property('kingLiberated').to_boolean() && my_inebriety() == inebriety_limit() && my_adventures() == 0) {
         nightcap();
     }
+
+    restoreDefaultMPA();
 
     string breakpoint = halloween ? "halloweenEnd" : "end";
     if (!get_property('thoth19_event_list').contains_text(breakpoint)) {
