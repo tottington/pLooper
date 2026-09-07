@@ -388,17 +388,24 @@ void applyMPA(string pref, boolean halloween) {
         return;
     }
 
-    if (mpaPref("prusias_ploop_defaultMPA") == 0) {
+    int fallback = mpaPref("prusias_ploop_defaultMPA");
+    if (fallback == 0) {
         print("ERROR_PLOOP: prusias_ploop_leg1MPA/leg2MPA need prusias_ploop_defaultMPA set to put valueOfAdventure back to.", "red");
         return;
     }
 
+    string source = pref;
     int mpa = mpaPref(pref);
-    if (mpa == 0 || get_property("valueOfAdventure").to_int() == mpa) {
+    if (mpa == 0) {
+        source = "prusias_ploop_defaultMPA";
+        mpa = fallback;
+    }
+
+    if (get_property("valueOfAdventure").to_int() == mpa) {
         return;
     }
 
-    print("Setting valueOfAdventure to " + mpa + " (" + pref + ")", "teal");
+    print("Setting valueOfAdventure to " + mpa + " (" + source + ")", "teal");
     set_property("valueOfAdventure", mpa);
 }
 
@@ -1354,6 +1361,10 @@ void runPreAscensionPhase(boolean halloween) {
         return;
     }
 
+    // the overdrunk turns are wineglass barf turns rather than leg 1's, so they
+    // and the nightcap that buys them are worth the normal value
+    applyMPA("prusias_ploop_defaultMPA", halloween);
+
     if (my_inebriety() == inebriety_limit() && my_familiar() != $familiar[Stooper]) {
         preCSrun();
     }
@@ -1532,6 +1543,10 @@ void runNightcapPhase(boolean halloween) {
     if (get_property("ascensionsToday").to_int() != 1) {
         return;
     }
+
+    // the maid, the cape and the nightcap itself all buy rollover adventures,
+    // and those get spent in tomorrow's leg 1
+    applyMPA("prusias_ploop_leg1MPA", halloween);
 
     if (halloween) {
         if (get_property('kingLiberated').to_boolean() && my_inebriety() == inebriety_limit() && my_adventures() < 5) {
