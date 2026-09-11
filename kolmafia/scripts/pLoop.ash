@@ -239,7 +239,7 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_useAdvForPvpAtBoxingDaycare</b> - Set to <b>true</b> if you want to spend 1 adv getting pvp fights from boxing daycare.");
     print_html("<b>prusias_ploop_postRunMoonTune</b> - Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign.");
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
-    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo. <b>cowo</b> is dropped while overdrunk, since Drunkula's wineglass cannot win Coral Corral fights.");
+    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo. A <b>farmingMethod</b> argument such as <b>farmingMethod=cowo</b> is dropped while overdrunk, since Drunkula's wineglass cannot win Coral Corral fights.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
     print_html("<b>prusias_ploop_postDayScript</b> - Will cli_execute whatever this property is set to once the day is finished, just before the end of day ptrack breakpoint is recorded.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
@@ -949,9 +949,37 @@ boolean yachtzeeAccess() {
 
 //cowo sends garbo to The Coral Corral, which an overdrunk character cannot win:
 //Drunkula's wineglass blocks skills and combat items and costs 30 familiar weight.
+//Garbo takes farmingMethod=value or farmingMethod value, and a quoted value can
+//span several words.
 string stripCowo(string args) {
     string out;
+    boolean dropValue = false;
+    string openQuote = "";
     foreach i, part in split_string(args, " ") {
+        if (openQuote != "") {
+            if (part.contains_text(openQuote))
+                openQuote = "";
+            continue;
+        }
+        string lower = part.to_lower_case();
+        if (lower == "farmingmethod") {
+            dropValue = true;
+            continue;
+        }
+        string value = part;
+        if (lower.index_of("farmingmethod=") == 0) {
+            value = part.substring(14);
+            dropValue = true;
+        }
+        if (dropValue) {
+            dropValue = value == "";
+            if (value != "") {
+                string quote = value.substring(0, 1);
+                if ((quote == "\"" || quote == "'") && value.last_index_of(quote) == 0)
+                    openQuote = quote;
+            }
+            continue;
+        }
         if (part != "cowo" && part != "") {
             if (out != "")
                 out += " ";
@@ -990,9 +1018,10 @@ void garboUsage(string x) {
     if (x != "")
         garboString += " " + x;
     string extraArgs = get_property("prusias_ploop_garboAdditionalArg");
-    if (my_inebriety() > inebriety_limit() && extraArgs.contains_text("cowo")) {
+    string lowerArgs = extraArgs.to_lower_case();
+    if (my_inebriety() > inebriety_limit() && (lowerArgs.contains_text("cowo") || lowerArgs.contains_text("farmingmethod"))) {
         extraArgs = stripCowo(extraArgs);
-        print("Overdrunk, so dropping cowo from garbo's arguments.", "teal");
+        print("Overdrunk, so dropping the farming method from garbo's arguments.", "teal");
     }
     if (extraArgs != "")
         garboString += " " + extraArgs;
