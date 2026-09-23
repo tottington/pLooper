@@ -218,6 +218,7 @@ void ploopHelper() {
     print_html("<b>load (name)</b> - Loads the state of pLooper from the file with the given name");
     print("Daily Commands", "teal");
     print_html("<b>fullday</b> - Fullday wrapper");
+    print_html("<b>knob</b> - Opens Cobb's Knob Treasury now: adventures in The Outskirts of Cobb's Knob for the encryption key (about 11 turns) and uses the council's map. Runs whether or not <b>prusias_ploop_openKnobTreasury</b> is set.");
     printPloopChunkHelp();
     print("Commonly Used Configs", "teal");
     print_html("<b>clearacquirelist</b> - Empties Acquisition List so no additional items outside README are acquired before ascension.");
@@ -1307,8 +1308,9 @@ boolean knobOpen() {
 
 //The Treasury opens with the Knob: the Outskirts' encryption key plus the council's map.
 //A new ascension resets the level 5 quest, so this runs once per loop.
-void openKnobTreasuryIfNeeded() {
-    if (!get_property("prusias_ploop_openKnobTreasury").to_boolean() || knobOpen()) {
+void openKnobTreasury() {
+    if (knobOpen()) {
+        print("The Knob Treasury is already open.", "teal");
         return;
     }
 
@@ -1364,6 +1366,12 @@ void openKnobTreasuryIfNeeded() {
     use(1, $item[Cobb's Knob map]);
     if (!knobOpen()) {
         print("ERROR_PLOOP: Used Cobb's Knob map but the Knob Treasury is still closed.", "red");
+    }
+}
+
+void openKnobTreasuryIfNeeded() {
+    if (get_property("prusias_ploop_openKnobTreasury").to_boolean() && !knobOpen()) {
+        openKnobTreasury();
     }
 }
 
@@ -1922,6 +1930,9 @@ void main(string input) {
                 return;
             case "listsaves":
                 listSaves();
+                return;
+            case "knob":
+                openKnobTreasury();
                 return;
             case "piraterealmenable":
                 user_confirm("Make sure you don't have breakfast on startup or any startup scripts that run breakfast! This option uses breakfast to unlock pirateRealm for cockroaches");
