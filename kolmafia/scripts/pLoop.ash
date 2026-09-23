@@ -55,7 +55,7 @@ prusias_ploop_alwaysPvP = boolean
 prusias_ploop_leg1PvP = boolean
 prusias_ploop_disableOffhandRemarkable = boolean
 prusias_ploop_neverPvpOverride = boolean
-prusias_ploop_disableOverdrunkBarfCheck = boolean
+prusias_ploop_disableDinseylandfillPlan = boolean
 
 prusias_ploop_detectHalloween = boolean
 prusias_ploop_tryDmtDupe = boolean
@@ -79,7 +79,9 @@ prusias_ploop_utsCodpieceCheck = boolean - fill The Eternity Codpiece with five 
 
 Script state tracking
 _prusias_ploop_got_steel_organ - Only used on leg 2 and reset on ascension/day
-_prusias_ploop_skipOverdrunkBarf - today's decision on skipping the nightcap and overdrunk garbo run
+prusias_ploop_overdrunkAdventureHistory - simulated overdrunk adventures on the last 5 days, newest last
+_prusias_ploop_overdrunkAdventuresRecorded - today's simulated overdrunk adventures are already in the history
+_prusias_ploop_dinseylandfillPlan - today's Dinseylandfill decision: open, skip or none
 prusias_ploop_takenFromClanStashItems - items that need to be returned to stash
 prusias_ploop_clanStashTakenFrom - return to right clan
 prusias_ploop_validSaves - list of valid save states
@@ -88,7 +90,9 @@ prusias_ploop_runNextDate - date the run next tracker was last updated
 */
 boolean [string] skip_props = {
     "_prusias_ploop_got_steel_organ": true,
-    "_prusias_ploop_skipOverdrunkBarf": true,
+    "prusias_ploop_overdrunkAdventureHistory": true,
+    "_prusias_ploop_overdrunkAdventuresRecorded": true,
+    "_prusias_ploop_dinseylandfillPlan": true,
     "prusias_ploop_takenFromClanStashItems": true,
     "prusias_ploop_clanStashTakenFrom": true,
     "prusias_ploop_validSaves": true,
@@ -253,7 +257,7 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_optOutSmoking</b> - Set to <b>true</b> to disable using 4 campfire smokes before ascension when Getaway Campsite is unlocked.");
     print_html("<b>prusias_ploop_keepCowoWhileOverdrunk</b> - Set to <b>true</b> to keep the <b>farmingMethod</b> argument while overdrunk, for characters that can win Coral Corral fights holding Drunkula's wineglass.");
     print_html("<b>prusias_ploop_disableOffhandRemarkable</b> - Set to true to disable casting offhand remarkable on rollover");
-    print_html("<b>prusias_ploop_disableOverdrunkBarfCheck</b> - Set to <b>true</b> to always nightcap and run garbo overdrunk before ascending. Otherwise, when that run would buy a one-day ticket to Dinseylandfill for Barf Mountain, pLooper asks CONSUME at the start of the day how many adventures the Stooper drink and the nightcap would give, without drinking anything, and skips them and the run when those adventures times <b>valueOfAdventure</b> are less than the ticket's mall price.");
+    print_html("<b>prusias_ploop_disableDinseylandfillPlan</b> - Set to <b>true</b> to leave Dinseylandfill to garbo. Otherwise, when the overdrunk garbo run would buy a one-day ticket to Dinseylandfill for Barf Mountain, pLooper decides each morning whether the ticket pays for the whole day: the overdrunk adventures it expects times <b>valueOfAdventure</b>, plus the lucky gold ring's 15 daily FunFunds at a twentieth of a ticket each. If it pays, the ticket is used before leg 1's garbo run so the whole day has access. If not, the Stooper drink, the nightcap and the overdrunk garbo run are skipped. The expected adventures are the median of the last 5 days in <b>prusias_ploop_overdrunkAdventureHistory</b>, simulated with CONSUME just before each day's Stooper drink without drinking anything.");
     print("Smol Specific", "teal");
     print_html("<b>prusias_ploop_smolNoSaladFork</b> - Set to true to disable preparing a salad fork before ascension for smol");
     print_html("<b>prusias_ploop_smolNoFrostyMug</b> - Set to true to disable preparing a frosty mug before ascension for smol");
@@ -1063,35 +1067,98 @@ int consumeAdventureYield(string consumeOutput) {
     return m.group(1).to_float().to_int();
 }
 
-//The Stooper drink and the nightcap, simulated without drinking. In nightcap mode CONSUME
-//adds the Stooper's liver point itself unless the Stooper is already out.
-int predictedOverdrunkAdventures() {
-    int stooperLiver = my_familiar() == $familiar[Stooper] ? 1 : 0;
+//The Stooper drink and the nightcap, simulated without drinking. With the Stooper not yet
+//out, CONSUME adds its liver point itself in nightcap mode.
+int simulateOverdrunkAdventures() {
     int nightcapValue = get_property("valueOfAdventure").to_int() / 2;
-    return consumeAdventureYield(cli_execute_output("CONSUME ORGANS 0 " + stooperLiver + " 0 NIGHTCAP SIM VALUE " + nightcapValue));
+    return consumeAdventureYield(cli_execute_output("CONSUME ORGANS 0 0 0 NIGHTCAP SIM VALUE " + nightcapValue));
 }
 
-//Decided once a day, before leg 1's garbo run.
-//Access bought later in the day makes the overdrunk run free, so it is checked every time.
-boolean skipOverdrunkBarf() {
-    if (get_property("prusias_ploop_disableOverdrunkBarfCheck").to_boolean())
-        return false;
-    if (get_property("_prusias_ploop_skipOverdrunkBarf") == "") {
-        boolean skip = false;
+int[int] parseAdventureHistory(string history) {
+    int[int] counts;
+    foreach i, part in split_string(history, ",") {
+        if (part != "")
+            counts[count(counts)] = part.to_int();
+    }
+    return counts;
+}
+
+//keeps the newest 5
+string appendAdventureHistory(string history, int adventures) {
+    int[int] counts = parseAdventureHistory(history);
+    string updated = adventures.to_string();
+    for i from count(counts) - 1 downto max(0, count(counts) - 4) {
+        updated = counts[i].to_string() + "," + updated;
+    }
+    return updated;
+}
+
+//median, or -1 with no history
+int predictAdventures(string history) {
+    int[int] counts = parseAdventureHistory(history);
+    if (count(counts) == 0)
+        return -1;
+    sort counts by value;
+    return counts[count(counts) / 2];
+}
+
+boolean dinseylandfillPlanApplies() {
+    return !get_property("prusias_ploop_disableDinseylandfillPlan").to_boolean()
+        && !get_property("stenchAirportAlways").to_boolean()
+        && overdrunkGarboFarmsBarf();
+}
+
+//Run just before the Stooper drink, once the sober garbo run has used the daily extras a
+//morning simulation would also count. Nothing is drunk, so every day is measured.
+void recordOverdrunkAdventures() {
+    if (get_property("_prusias_ploop_overdrunkAdventuresRecorded").to_boolean() || !dinseylandfillPlanApplies())
+        return;
+    int adventures = simulateOverdrunkAdventures();
+    if (adventures < 0)
+        return;
+    set_property("prusias_ploop_overdrunkAdventureHistory",
+        appendAdventureHistory(get_property("prusias_ploop_overdrunkAdventureHistory"), adventures));
+    set_property("_prusias_ploop_overdrunkAdventuresRecorded", "true");
+}
+
+//A ticket's access lasts until ascending, so opened before leg 1's garbo run it also earns the
+//lucky gold ring's 15 daily FunFunds. 20 FunFunds buy a ticket at The Dinsey Company Store.
+//"open" uses a ticket in the morning, "skip" drops the overdrunk leg, and "none" leaves garbo
+//to buy a ticket for the overdrunk leg. Decided once a day.
+string dinseylandfillPlan() {
+    if (get_property("_prusias_ploop_dinseylandfillPlan") == "") {
+        string plan = "none";
+        int predicted = predictAdventures(get_property("prusias_ploop_overdrunkAdventureHistory"));
         int value = get_property("valueOfAdventure").to_int();
         int ticket = mall_price($item[one-day ticket to Dinseylandfill]);
-        int predicted = -1;
-        if (!hasDinseylandfillAccess() && overdrunkGarboFarmsBarf() && value > 0 && ticket > 0)
-            predicted = predictedOverdrunkAdventures();
-        if (predicted >= 0) {
-            skip = predicted * value < ticket;
-            string verdict = skip ? "is less than" : "covers";
-            print("Overdrunk leg: about " + predicted + " adventures at " + value + " meat each " + verdict
-                + " the " + ticket + " meat one-day ticket to Dinseylandfill.", "teal");
+        if (dinseylandfillPlanApplies() && !hasDinseylandfillAccess() && !needToAcquireItem($item[Drunkula's wineglass])
+                && predicted >= 0 && value > 0 && ticket > 0) {
+            int funFunds = 0;
+            if (available_amount($item[lucky gold ring]) > 0)
+                funFunds = max(0, 15 - get_property("_luckyGoldRingFunFunds").to_int());
+            int dayValue = predicted * value + funFunds * ticket / 20;
+            plan = dayValue >= ticket ? "open" : "skip";
+            print("Dinseylandfill today: about " + predicted + " overdrunk adventures at " + value + " meat each and "
+                + funFunds + " lucky gold ring FunFunds come to " + dayValue + " meat against a " + ticket + " meat ticket, so "
+                + (plan == "open" ? "opening it before garbo." : "skipping the overdrunk leg."), "teal");
         }
-        set_property("_prusias_ploop_skipOverdrunkBarf", skip.to_string());
+        set_property("_prusias_ploop_dinseylandfillPlan", plan);
     }
-    return get_property("_prusias_ploop_skipOverdrunkBarf").to_boolean() && !hasDinseylandfillAccess();
+    return get_property("_prusias_ploop_dinseylandfillPlan");
+}
+
+//If no ticket can be had, garbo still buys one for the overdrunk leg.
+void openDinseylandfillIfPlanned() {
+    if (dinseylandfillPlan() != "open" || hasDinseylandfillAccess())
+        return;
+    item ticket = $item[one-day ticket to Dinseylandfill];
+    if (item_amount(ticket) == 0 && buy(1, ticket, mall_price(ticket)) == 0) {
+        print("ERROR_PLOOP: Could not buy a one-day ticket to Dinseylandfill, so it was not opened before garbo.", "red");
+        return;
+    }
+    if (!use(1, ticket) || !hasDinseylandfillAccess()) {
+        print("ERROR_PLOOP: Used a one-day ticket to Dinseylandfill but have no access.", "red");
+    }
 }
 
 void postRunNoGarbo() {
@@ -1399,7 +1466,7 @@ void runLeg1GarboPhase(boolean halloween) {
                 print("WARNING_PLOOP: Somehow consume + freecandy left empty liver", "red");
             }
         } else {
-            skipOverdrunkBarf();
+            openDinseylandfillIfPlanned();
             if (get_property("prusias_ploop_garboWorkshed") == "" || get_property("_workshedItemUsed").to_boolean()) {
                 garboUsage("ascend");
             } else {
@@ -1435,10 +1502,14 @@ void runPreAscensionPhase(boolean halloween) {
         return;
     }
 
+    boolean wineglass = !needToAcquireItem($item[Drunkula's wineglass]);
+    if (!halloween && wineglass && my_inebriety() == inebriety_limit() && my_familiar() != $familiar[Stooper]) {
+        recordOverdrunkAdventures();
+    }
     //Decided before the Stooper drink, which only adds to the overdrunk run.
     //Adventures left from the sober run still need that run to spend them.
-    boolean skipBarf = !halloween && my_adventures() == 0
-        && !needToAcquireItem($item[Drunkula's wineglass]) && skipOverdrunkBarf();
+    boolean skipBarf = !halloween && wineglass && my_adventures() == 0
+        && dinseylandfillPlan() == "skip" && !hasDinseylandfillAccess();
     if (my_inebriety() == inebriety_limit() && my_familiar() != $familiar[Stooper]) {
         preCSrun(!skipBarf);
     }
