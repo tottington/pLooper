@@ -1345,11 +1345,13 @@ void openKnobTreasury() {
         set_property("choiceAdventure" + choice, option);
     }
     try {
-        //the key is a delayed noncombat, and free fights do not advance the delay
+        //the key is a delayed noncombat, and free fights do not advance the delay.
+        //The macro replaces whatever combat script is active, which may only
+        //handle another script's monsters.
         int tries = 0;
         while (item_amount(key) == 0 && my_adventures() > 0 && tries < 25) {
             tries += 1;
-            if (!adv1($location[The Outskirts of Cobb's Knob], -1, "")) {
+            if (!adv1($location[The Outskirts of Cobb's Knob], -1, "attack; repeat;")) {
                 break;
             }
         }
