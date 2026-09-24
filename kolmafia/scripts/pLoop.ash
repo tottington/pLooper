@@ -63,6 +63,7 @@ prusias_ploop_postRunMoonTune = int
 prusias_ploop_optOutSmoking = boolean
 prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes. if empty, uses the default
 prusias_ploop_nightcapMPA = int
+prusias_ploop_useBarfTicketAtStart = boolean
 prusias_ploop_garboAdditionalArg = string
 prusias_ploop_breakfastAdditionalScript = string
 prusias_ploop_postDayScript = string
@@ -238,6 +239,7 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_dmtDupeItemId</b> - Set to <b>item id</b> you would like to dupe");
     print_html("<b>prusias_ploop_useAdvForPvpAtBoxingDaycare</b> - Set to <b>true</b> if you want to spend 1 adv getting pvp fights from boxing daycare.");
     print_html("<b>prusias_ploop_postRunMoonTune</b> - Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign.");
+    print_html("<b>prusias_ploop_useBarfTicketAtStart</b> - Set to <b>true</b> to use a one-day ticket to Dinseylandfill before leg 1's garbo run whenever Dinseylandfill is not open yet. Its access lasts until ascending, so the ticket an overdrunk Barf Mountain run would buy also covers the sober leg. Uses a ticket you already have first, otherwise buys one at up to 500,000 meat like garbo does.");
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
     print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
@@ -981,6 +983,22 @@ void garboUsage(string x) {
     cli_execute(garboString);
 }
 
+//A one-day ticket's access lasts until ascending
+void useBarfTicketAtStart() {
+    if (!get_property("prusias_ploop_useBarfTicketAtStart").to_boolean()
+            || get_property("stenchAirportAlways").to_boolean()
+            || get_property("_stenchAirportToday").to_boolean())
+        return;
+    item ticket = $item[one-day ticket to Dinseylandfill];
+    //garbo's own price cap for this ticket, above most autoBuyPriceLimit settings
+    if (available_amount(ticket) == 0 && buy(1, ticket, 500000) == 0) {
+        print("ERROR_PLOOP: Could not buy a one-day ticket to Dinseylandfill before garbo.", "red");
+        return;
+    }
+    if (!retrieve_item(1, ticket) || !use(1, ticket))
+        print("ERROR_PLOOP: Could not use a one-day ticket to Dinseylandfill before garbo.", "red");
+}
+
 void postRunNoGarbo() {
     shrugAT();
     cli_execute("hagnk all");
@@ -1286,6 +1304,7 @@ void runLeg1GarboPhase(boolean halloween) {
                 print("WARNING_PLOOP: Somehow consume + freecandy left empty liver", "red");
             }
         } else {
+            useBarfTicketAtStart();
             if (get_property("prusias_ploop_garboWorkshed") == "" || get_property("_workshedItemUsed").to_boolean()) {
                 garboUsage("ascend");
             } else {
