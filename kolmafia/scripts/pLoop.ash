@@ -64,12 +64,12 @@ prusias_ploop_optOutSmoking = boolean
 prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes. if empty, uses the default
 prusias_ploop_nightcapMPA = int
 prusias_ploop_garboAdditionalArg = string
-prusias_ploop_keepCowoWhileOverdrunk = boolean
+prusias_ploop_dropFarmingMethodWhileOverdrunk = boolean
 prusias_ploop_breakfastAdditionalScript = string
+prusias_ploop_preAscendSoybeanFutures = boolean - spend Interesting Coins on soybean futures before ascending, since the coins do not survive the Astral Gash
 prusias_ploop_postDayScript = string
 prusias_ploop_alwaysSteelOrgan = boolean
 prusias_ploop_openKnobTreasury = boolean
-prusias_ploop_preAscendSoybeanFutures = boolean - spend Interesting Coins on soybean futures before ascending, since the coins do not survive the Astral Gash
 
 Smol specific
 prusias_ploop_smolNoSaladFork = boolean
@@ -243,17 +243,17 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_useAdvForPvpAtBoxingDaycare</b> - Set to <b>true</b> if you want to spend 1 adv getting pvp fights from boxing daycare.");
     print_html("<b>prusias_ploop_postRunMoonTune</b> - Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign.");
     print_html("<b>prusias_ploop_nightcapMPA</b> - False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap.");
-    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo. A <b>farmingMethod</b> argument such as <b>farmingMethod=cowo</b> is dropped while overdrunk, since Drunkula's wineglass usually cannot win Coral Corral fights; see <b>prusias_ploop_keepCowoWhileOverdrunk</b>.");
+    print_html("<b>prusias_ploop_garboAdditionalArg</b> - Additional argument to pass to garbo. It is passed unchanged while overdrunk unless <b>prusias_ploop_dropFarmingMethodWhileOverdrunk</b> is set.");
+    print_html("<b>prusias_ploop_dropFarmingMethodWhileOverdrunk</b> - Set to <b>true</b> to drop a <b>farmingMethod</b> argument such as <b>farmingMethod=cowo</b> from garbo's arguments while overdrunk, for characters that cannot win Coral Corral fights holding Drunkula's wineglass.");
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
+    print_html("<b>prusias_ploop_preAscendSoybeanFutures</b> - Set to true to spend Interesting Coins on soybean futures just before ascending. Coins are quest items and do not survive the Astral Gash, while the food does. Buys as many as the coins on hand cover, and a fresh run hands back 4 coins regardless, so leg 1 of a day is normally holding the 7 one purchase costs.");
     print_html("<b>prusias_ploop_postDayScript</b> - Will cli_execute whatever this property is set to once the day is finished, just before the end of day ptrack breakpoint is recorded.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
     print_html("<b>prusias_ploop_openKnobTreasury</b> - Set to <b>true</b> to open Cobb's Knob Treasury after the loop script, by adventuring in The Outskirts of Cobb's Knob for the encryption key (about 11 turns) and using the council's map.");
-    print_html("<b>prusias_ploop_preAscendSoybeanFutures</b> - Set to true to spend Interesting Coins on soybean futures just before ascending. Coins are quest items and do not survive the Astral Gash, while the food does. Buys as many as the coins on hand cover, and a fresh run hands back 4 coins regardless, so leg 1 of a day is normally holding the 7 one purchase costs.");
     print_html("<b>prusias_ploop_smokeMessage</b> - Message to write with the campfire smokes before ascension. Leave empty for the default. Set it with <b>ploop smokemessage (your message)</b> rather than by hand. 100 character max; <b>%n</b> is replaced with the smoke number and an <b>&amp;</b> becomes <b>and</b>.");
     print_html("<b>prusias_ploop_loopScriptClan</b> - Clan to join immediately before the configured loop script runs. pLooper returns to <b>prusias_ploop_homeClan</b> immediately afterward. Leave empty to stay in the home clan.");
     print("Disables", "teal");
     print_html("<b>prusias_ploop_optOutSmoking</b> - Set to <b>true</b> to disable using 4 campfire smokes before ascension when Getaway Campsite is unlocked.");
-    print_html("<b>prusias_ploop_keepCowoWhileOverdrunk</b> - Set to <b>true</b> to keep the <b>farmingMethod</b> argument while overdrunk, for characters that can win Coral Corral fights holding Drunkula's wineglass.");
     print_html("<b>prusias_ploop_disableOffhandRemarkable</b> - Set to true to disable casting offhand remarkable on rollover");
     print("Smol Specific", "teal");
     print_html("<b>prusias_ploop_smolNoSaladFork</b> - Set to true to disable preparing a salad fork before ascension for smol");
@@ -999,7 +999,7 @@ boolean yachtzeeAccess() {
     return false;
 }
 
-//cowo sends garbo to The Coral Corral, which most overdrunk characters cannot win:
+//cowo sends garbo to The Coral Corral, which some overdrunk characters cannot win:
 //Drunkula's wineglass blocks skills and combat items and costs 30 familiar weight.
 //Garbo takes farmingMethod=value or farmingMethod value, and a quoted value can
 //span several words.
@@ -1072,7 +1072,7 @@ void garboUsage(string x) {
     string extraArgs = get_property("prusias_ploop_garboAdditionalArg");
     string lowerArgs = extraArgs.to_lower_case();
     if (my_inebriety() > inebriety_limit()
-            && !get_property("prusias_ploop_keepCowoWhileOverdrunk").to_boolean()
+            && get_property("prusias_ploop_dropFarmingMethodWhileOverdrunk").to_boolean()
             && (lowerArgs.contains_text("cowo") || lowerArgs.contains_text("farmingmethod"))) {
         extraArgs = stripCowo(extraArgs);
         print("Overdrunk, so dropping the farming method from garbo's arguments.", "teal");
