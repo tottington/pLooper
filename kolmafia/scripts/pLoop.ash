@@ -1142,8 +1142,67 @@ void postRunNoGarbo() {
     cli_execute('shrug stevedave');
 }
 
+//totLocal: fills one organ point at a time so garbo still plans the rest of the diet.
+//Astral pilsners go first, since garbo drinks them anyway with usepilsners.
+void ensureAdventures(int needed, string why) {
+    if (my_adventures() >= needed)
+        return;
+    print("Topping up from " + my_adventures() + " to " + needed + " adventures for " + why + ".", "teal");
+    if (item_amount($item[astral six-pack]) > 0 && !use(1, $item[astral six-pack]))
+        print("ERROR_PLOOP: Could not open the astral six-pack.", "red");
+    string value = get_property("valueOfAdventure");
+    int tries = 0;
+    while (my_adventures() < needed && tries < 20) {
+        tries += 1;
+        int before = my_adventures();
+        if (my_inebriety() < inebriety_limit() && item_amount($item[astral pilsner]) > 0) {
+            if (have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
+                    && !use_skill(1, $skill[The Ode to Booze]))
+                print("Could not cast The Ode to Booze; drinking without it.", "teal");
+            if (!drink(1, $item[astral pilsner]))
+                print("ERROR_PLOOP: Could not drink an astral pilsner.", "red");
+        } else if (my_inebriety() < inebriety_limit()) {
+            if (!cli_execute("CONSUME ORGANS 0 1 0 VALUE " + value))
+                print("ERROR_PLOOP: CONSUME could not fill a liver point.", "red");
+        } else if (my_fullness() < fullness_limit()) {
+            if (!cli_execute("CONSUME ORGANS 1 0 0 VALUE " + value))
+                print("ERROR_PLOOP: CONSUME could not fill a stomach point.", "red");
+        } else {
+            break;
+        }
+        if (my_adventures() <= before)
+            break;
+    }
+    if (my_adventures() < needed)
+        print("ERROR_PLOOP: Only " + my_adventures() + " of the " + needed + " adventures " + why + " needs.", "red");
+}
+
+//totLocal: garbo will not start a PirateRealm voyage with 40 or fewer adventures in hand,
+//and does it before its diet, so the top-up has to happen before garbo starts.
+boolean pirateRealmPending() {
+    return get_property("prusias_ploop_garboAdditionalArg").to_lower_case().contains_text("cockroach")
+        && get_property("_lastPirateRealmIsland") != "Trash Island"
+        && my_inebriety() <= inebriety_limit();
+}
+
+//totLocal: pearlo fills the codpiece in leg 2, which costs up to about 50 turns
+boolean codpiecePearlsNeeded() {
+    if (!get_property("prusias_ploop_utsCodpieceCheck").to_boolean() || get_property("prusias_ploop_pathId").to_int() != 55)
+        return false;
+    cli_execute("refresh status");
+    int mounted = 0;
+    foreach s in $slots[codpiece1, codpiece2, codpiece3, codpiece4, codpiece5] {
+        if (equipped_item(s) == $item[unblemished pearl])
+            mounted += 1;
+    }
+    return mounted < 5;
+}
+
 void postRun(string x) {
     postRunNoGarbo();
+
+    if (!x.contains_text("nobarf") && pirateRealmPending())
+        ensureAdventures(41, "garbo's PirateRealm voyage");
 
     if (get_property("prusias_ploop_garboPostAscendWorkshed") == "")
         garboUsage(x);
@@ -1276,10 +1335,14 @@ void postAscendScriptCleanup() {
     }
 }
 
+boolean steelOrganNeeded() {
+    return get_property("_prusias_ploop_got_steel_organ") != "true"
+        && (get_property("prusias_ploop_alwaysSteelOrgan").to_boolean()
+            || (steel_organ_paths contains get_property("prusias_ploop_pathId")));
+}
+
 void acquireSteelOrganIfNeeded() {
-    if (get_property("_prusias_ploop_got_steel_organ") == "true"
-            || (!get_property("prusias_ploop_alwaysSteelOrgan").to_boolean()
-                && !(steel_organ_paths contains get_property("prusias_ploop_pathId")))) {
+    if (!steelOrganNeeded()) {
         return;
     }
 
@@ -1398,6 +1461,12 @@ void installPostLoopWorkshedIfNeeded() {
 }
 
 void prepareForPostRun() {
+    int prepTurns = 0;
+    if (steelOrganNeeded())
+        prepTurns += 20;
+    if (get_property("prusias_ploop_openKnobTreasury").to_boolean() && !knobOpen())
+        prepTurns += 12;
+    ensureAdventures(prepTurns, "the steel organ and the Knob Treasury");
     acquireSteelOrganIfNeeded();
     openKnobTreasuryIfNeeded();
     tunePostRunMoonIfNeeded();
@@ -1678,6 +1747,8 @@ void runLeg2GarboPhase(boolean halloween) {
             cli_execute("freecandy");
         } else {
             if (!get_property("breakfastCompleted").to_boolean()) {
+                if (codpiecePearlsNeeded())
+                    ensureAdventures(50, "pearlo's codpiece pearls");
                 augmentBreakfast();
             }
             postRun("");
