@@ -1151,27 +1151,40 @@ void ensureAdventures(int needed, string why) {
     if (item_amount($item[astral six-pack]) > 0 && !use(1, $item[astral six-pack]))
         print("ERROR_PLOOP: Could not open the astral six-pack.", "red");
     string value = get_property("valueOfAdventure");
+    //a source that adds nothing is dropped and the next one tried
+    boolean pilsnersDone = false;
+    boolean liverDone = false;
     int tries = 0;
     while (my_adventures() < needed && tries < 20) {
         tries += 1;
         int before = my_adventures();
-        if (my_inebriety() < inebriety_limit() && item_amount($item[astral pilsner]) > 0) {
+        string source;
+        if (!pilsnersDone && my_inebriety() < inebriety_limit() && item_amount($item[astral pilsner]) > 0) {
+            source = "pilsner";
             if (have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
                     && !use_skill(1, $skill[The Ode to Booze]))
                 print("Could not cast The Ode to Booze; drinking without it.", "teal");
             if (!drink(1, $item[astral pilsner]))
                 print("ERROR_PLOOP: Could not drink an astral pilsner.", "red");
-        } else if (my_inebriety() < inebriety_limit()) {
+        } else if (!liverDone && my_inebriety() < inebriety_limit()) {
+            source = "liver";
             if (!cli_execute("CONSUME ORGANS 0 1 0 VALUE " + value))
                 print("ERROR_PLOOP: CONSUME could not fill a liver point.", "red");
         } else if (my_fullness() < fullness_limit()) {
+            source = "stomach";
             if (!cli_execute("CONSUME ORGANS 1 0 0 VALUE " + value))
                 print("ERROR_PLOOP: CONSUME could not fill a stomach point.", "red");
         } else {
             break;
         }
-        if (my_adventures() <= before)
-            break;
+        if (my_adventures() <= before) {
+            if (source == "pilsner")
+                pilsnersDone = true;
+            else if (source == "liver")
+                liverDone = true;
+            else
+                break;
+        }
     }
     if (my_adventures() < needed)
         print("ERROR_PLOOP: Only " + my_adventures() + " of the " + needed + " adventures " + why + " needs.", "red");
