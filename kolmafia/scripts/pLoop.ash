@@ -1142,50 +1142,69 @@ void postRunNoGarbo() {
     cli_execute('shrug stevedave');
 }
 
-//totLocal: fills one organ point at a time so garbo still plans the rest of the diet.
-//Astral pilsners go first, since garbo drinks them anyway with usepilsners.
+//totLocal: drinks one liver point at a time so garbo still plans the rest of the diet.
+//Astral pilsners go first, since garbo drinks them anyway with usepilsners, then Sacramento wine.
 void ensureAdventures(int needed, string why) {
     if (my_adventures() >= needed)
         return;
     print("Topping up from " + my_adventures() + " to " + needed + " adventures for " + why + ".", "teal");
     if (item_amount($item[astral six-pack]) > 0 && !use(1, $item[astral six-pack]))
         print("ERROR_PLOOP: Could not open the astral six-pack.", "red");
-    string value = get_property("valueOfAdventure");
-    //a source that adds nothing is dropped and the next one tried
+    int winePrice = 2 * get_property("valueOfAdventure").to_int();
+    //the pinky ring adds 12.5% to wine. It never replaces a liver capacity accessory,
+    //and the accessory it replaces goes back afterwards.
+    item pinky = $item[mafia pinky ring];
+    slot pinkySlot = $slot[none];
+    foreach s in $slots[acc3, acc2, acc1] {
+        if (pinkySlot == $slot[none] && numeric_modifier(equipped_item(s), "Liver Capacity") == 0)
+            pinkySlot = s;
+    }
+    item previousAcc = $item[none];
+    boolean pinkySwapped = false;
+    boolean odeGaveUp = false;
     boolean pilsnersDone = false;
-    boolean liverDone = false;
     int tries = 0;
-    while (my_adventures() < needed && tries < 20) {
+    while (my_adventures() < needed && my_inebriety() < inebriety_limit() && tries < 20) {
         tries += 1;
         int before = my_adventures();
-        string source;
-        if (!pilsnersDone && my_inebriety() < inebriety_limit() && item_amount($item[astral pilsner]) > 0) {
-            source = "pilsner";
-            if (have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
-                    && !use_skill(1, $skill[The Ode to Booze]))
-                print("Could not cast The Ode to Booze; drinking without it.", "teal");
-            if (!drink(1, $item[astral pilsner]))
-                print("ERROR_PLOOP: Could not drink an astral pilsner.", "red");
-        } else if (!liverDone && my_inebriety() < inebriety_limit()) {
-            source = "liver";
-            if (!cli_execute("CONSUME ORGANS 0 1 0 VALUE " + value))
-                print("ERROR_PLOOP: CONSUME could not fill a liver point.", "red");
-        } else if (my_fullness() < fullness_limit()) {
-            source = "stomach";
-            if (!cli_execute("CONSUME ORGANS 1 0 0 VALUE " + value))
-                print("ERROR_PLOOP: CONSUME could not fill a stomach point.", "red");
-        } else {
-            break;
+        boolean pilsner = !pilsnersDone && item_amount($item[astral pilsner]) > 0;
+        if (!pilsner) {
+            if (winePrice <= 0) {
+                print("ERROR_PLOOP: valueOfAdventure is not set, so no Sacramento wine is bought.", "red");
+                break;
+            }
+            if (item_amount($item[Sacramento wine]) == 0 && buy(1, $item[Sacramento wine], winePrice) == 0) {
+                print("ERROR_PLOOP: Could not buy a Sacramento wine under " + winePrice + " meat.", "red");
+                break;
+            }
+            if (!pinkySwapped && pinkySlot != $slot[none] && !have_equipped(pinky)
+                    && item_amount(pinky) > 0 && can_equip(pinky)) {
+                previousAcc = equipped_item(pinkySlot);
+                pinkySwapped = equip(pinkySlot, pinky);
+                if (my_inebriety() >= inebriety_limit())
+                    break;
+            }
         }
+        if (!odeGaveUp && have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
+                && !use_skill(1, $skill[The Ode to Booze])) {
+            shrugAT();
+            if (!use_skill(1, $skill[The Ode to Booze])) {
+                odeGaveUp = true;
+                print("Could not cast The Ode to Booze; drinking without it.", "teal");
+            }
+        }
+        //drinksilent skips mafia's Ode and pinky ring confirm dialogs
+        if (!cli_execute("drinksilent 1 " + (pilsner ? "astral pilsner" : "Sacramento wine")))
+            print("ERROR_PLOOP: Could not drink " + (pilsner ? "an astral pilsner" : "a Sacramento wine") + ".", "red");
         if (my_adventures() <= before) {
-            if (source == "pilsner")
+            if (pilsner)
                 pilsnersDone = true;
-            else if (source == "liver")
-                liverDone = true;
             else
                 break;
         }
     }
+    if (pinkySwapped && previousAcc != $item[none] && !equip(pinkySlot, previousAcc))
+        print("Could not put " + previousAcc + " back on after the pinky ring.", "teal");
     if (my_adventures() < needed)
         print("ERROR_PLOOP: Only " + my_adventures() + " of the " + needed + " adventures " + why + " needs.", "red");
 }
