@@ -1205,6 +1205,26 @@ void ensureAdventures(int needed, string why) {
     }
     if (pinkySwapped && previousAcc != $item[none] && !equip(pinkySlot, previousAcc))
         print("Could not put " + previousAcc + " back on after the pinky ring.", "teal");
+
+    //with the liver full, eats jumping horseradish one at a time. Mayodiol would turn it into
+    //drunkenness on a full liver, so a Mayodiol in the mouth skips this.
+    int foodPrice = 3 * get_property("valueOfAdventure").to_int();
+    item food = $item[jumping horseradish];
+    tries = 0;
+    while (foodPrice > 0 && get_property("mayoInMouth") != "Mayodiol"
+            && my_adventures() < needed && my_fullness() < fullness_limit() && tries < 20) {
+        tries += 1;
+        int before = my_adventures();
+        if (item_amount(food) == 0 && buy(1, food, foodPrice) == 0) {
+            print("ERROR_PLOOP: Could not buy " + food + " under " + foodPrice + " meat.", "red");
+            break;
+        }
+        //eatsilent skips mafia's milk and mayo confirm dialogs
+        if (!cli_execute("eatsilent 1 " + food))
+            print("ERROR_PLOOP: Could not eat " + food + ".", "red");
+        if (my_adventures() <= before)
+            break;
+    }
     if (my_adventures() < needed)
         print("ERROR_PLOOP: Only " + my_adventures() + " of the " + needed + " adventures " + why + " needs.", "red");
 }
