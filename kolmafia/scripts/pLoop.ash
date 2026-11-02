@@ -1104,13 +1104,12 @@ void postRunNoGarbo() {
     
 
     //insert asdon buffing
-    //The Asdon holds one driving style at a time, and garbo's cowo mode drives it
-    //waterproofly. Observantly turns bought here are wiped by the next garbo run and
-    //bought back by the leg after it, so both sides pay for fuel every cycle. Leave
-    //the workshed to garbo whenever cowo is among the arguments it is passed.
+    //The Asdon holds one driving style at a time, and garbo drives the one its farming
+    //method needs, so the workshed stays with garbo when a farming method is passed.
     if (get_workshed() == $item[Asdon Martin keyfob (on ring)]) {
-        if (get_property("prusias_ploop_garboAdditionalArg").contains_text("cowo")) {
-            print("Skipping asdon buffing; garbo is running cowo and drives waterproofly.");
+        string garboArgs = get_property("prusias_ploop_garboAdditionalArg").to_lower_case();
+        if (garboArgs.contains_text("cowo") || garboArgs.contains_text("farmingmethod")) {
+            print("Skipping asdon buffing; garbo drives the style its farming method needs.");
         } else {
             int numTurns = 1260; //set this value manually
             int numBuffs = numTurns/30 + 1;
