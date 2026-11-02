@@ -68,6 +68,8 @@ prusias_ploop_dropFarmingMethodWhileOverdrunk = boolean
 prusias_ploop_breakfastAdditionalScript = string
 prusias_ploop_preAscendSoybeanFutures = boolean - spend Interesting Coins on soybean futures before ascending, since the coins do not survive the Astral Gash
 prusias_ploop_postDayScript = string
+prusias_ploop_buyRaffleTickets = boolean - buy raffle tickets at the end of the day
+prusias_ploop_raffleTicketCount = int - how many raffle tickets to have bought by the end of the day
 prusias_ploop_alwaysSteelOrgan = boolean
 prusias_ploop_openKnobTreasury = boolean
 
@@ -250,6 +252,8 @@ void optional_help_info() {
     print_html("<b>prusias_ploop_breakfastAdditionalScript</b> - Will cli_execute whatever this property is set to after breakfast.");
     print_html("<b>prusias_ploop_preAscendSoybeanFutures</b> - Set to true to spend Interesting Coins on soybean futures just before ascending. Coins are quest items and do not survive the Astral Gash, while the food does. Buys as many as the coins on hand cover, and a fresh run hands back 4 coins regardless, so leg 1 of a day is normally holding the 7 one purchase costs.");
     print_html("<b>prusias_ploop_postDayScript</b> - Will cli_execute whatever this property is set to once the day is finished, just before the end of day ptrack breakpoint is recorded.");
+    print_html("<b>prusias_ploop_buyRaffleTickets</b> - Set to <b>true</b> to buy raffle tickets at the end of the day, up to <b>prusias_ploop_raffleTicketCount</b>. Tickets already bought today count towards it. Tickets cost 10,000 meat each.");
+    print_html("<b>prusias_ploop_raffleTicketCount</b> - How many raffle tickets to have bought by the end of the day.");
     print_html("<b>prusias_ploop_alwaysSteelOrgan</b> - Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about.");
     print_html("<b>prusias_ploop_openKnobTreasury</b> - Set to <b>true</b> to open Cobb's Knob Treasury after the loop script, by adventuring in The Outskirts of Cobb's Knob for the encryption key (about 11 turns) and using the council's map.");
     print_html("<b>prusias_ploop_smokeMessage</b> - Message to write with the campfire smokes before ascension. Leave empty for the default. Set it with <b>ploop smokemessage (your message)</b> rather than by hand. 100 character max; <b>%n</b> is replaced with the smoke number and an <b>&amp;</b> becomes <b>and</b>.");
@@ -1857,6 +1861,34 @@ void runPostDayScript() {
     }
 }
 
+//Tickets vanish at rollover wherever they are, so any still held were bought today.
+//Takes the higher of the raffle page's count and the tickets held.
+int raffleTicketsBoughtToday() {
+    item ticket = $item[raffle ticket];
+    int held = item_amount(ticket) + closet_amount(ticket) + storage_amount(ticket);
+    matcher purchased = create_matcher("You have purchased ([\\d,]+) ticket", visit_url("raffle.php"));
+    int listed = purchased.find() ? purchased.group(1).to_int() : 0;
+    return max(held, listed);
+}
+
+void buyRaffleTicketsIfWanted() {
+    int wanted = get_property("prusias_ploop_raffleTicketCount").to_int();
+    if (!get_property("prusias_ploop_buyRaffleTickets").to_boolean() || wanted <= 0
+            || !get_property("kingLiberated").to_boolean())
+        return;
+    int bought = raffleTicketsBoughtToday();
+    if (bought >= wanted) {
+        print("Already bought " + bought + " of " + wanted + " raffle tickets today.", "teal");
+        return;
+    }
+    int missing = wanted - bought;
+    print("Buying " + missing + " raffle tickets, with " + bought + " of " + wanted + " bought today.", "teal");
+    //the raffle command returns true when it cannot reach the raffle house
+    int heldBefore = item_amount($item[raffle ticket]);
+    if (!cli_execute("raffle " + missing + " inventory") || item_amount($item[raffle ticket]) < heldBefore + missing)
+        print("ERROR_PLOOP: Could not buy " + missing + " raffle tickets.", "red");
+}
+
 void runNightcapPhase(boolean halloween) {
     if (get_property("ascensionsToday").to_int() != 1) {
         return;
@@ -1873,6 +1905,7 @@ void runNightcapPhase(boolean halloween) {
 
     string breakpoint = halloween ? "halloweenEnd" : "end";
     if (!get_property('thoth19_event_list').contains_text(breakpoint)) {
+        buyRaffleTicketsIfWanted();
         runPostDayScript();
         addBreakpoint(breakpoint);
         cli_execute("ptrack recap");
