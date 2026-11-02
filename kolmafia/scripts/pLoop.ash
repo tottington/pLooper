@@ -80,6 +80,7 @@ prusias_ploop_utsCodpieceCheck = boolean - fill The Eternity Codpiece with five 
 
 Script state tracking
 _prusias_ploop_got_steel_organ - Only used on leg 2 and reset on ascension/day
+_prusias_ploop_steel_organ_tries - Steel organ attempts this leg, reset on ascension/day
 prusias_ploop_takenFromClanStashItems - items that need to be returned to stash
 prusias_ploop_clanStashTakenFrom - return to right clan
 prusias_ploop_validSaves - list of valid save states
@@ -88,6 +89,7 @@ prusias_ploop_runNextDate - date the run next tracker was last updated
 */
 boolean [string] skip_props = {
     "_prusias_ploop_got_steel_organ": true,
+    "_prusias_ploop_steel_organ_tries": true,
     "prusias_ploop_takenFromClanStashItems": true,
     "prusias_ploop_clanStashTakenFrom": true,
     "prusias_ploop_validSaves": true,
@@ -1386,10 +1388,37 @@ void postAscendScriptCleanup() {
     }
 }
 
+//Stops at two tries, and once garbo has finished the leg's adventures.
 boolean steelOrganNeeded() {
     return get_property("_prusias_ploop_got_steel_organ") != "true"
+        && !have_skill($skill[Liver of Steel])
+        && get_property("_garboCompleted") == ""
+        && get_property("_prusias_ploop_steel_organ_tries").to_int() < 2
         && (get_property("prusias_ploop_alwaysSteelOrgan").to_boolean()
             || (steel_organ_paths contains get_property("prusias_ploop_pathId")));
+}
+
+//totLocal: fills the Asdon from pies so ploopgoals does not choose a mall fuel itself.
+//A pie gives at least 100 fuel.
+void fuelAsdon(int target) {
+    if (get_workshed() != $item[Asdon Martin keyfob (on ring)] || get_fuel() >= target)
+        return;
+    item pie = $item[pie man was not meant to eat];
+    int pies = ceil((target - get_fuel()) / 100.0);
+    int missing = pies - item_amount(pie);
+    if (missing > 0 && buy(missing, pie, 3000) == 0)
+        print("Could not buy " + missing + " " + pie + " under 3000 meat.", "teal");
+    int usable = min(pies, item_amount(pie));
+    if (usable > 0 && !cli_execute("asdonmartin fuel " + usable + " " + pie))
+        print("Could not fuel the Asdon with " + pie + ".", "teal");
+}
+
+//ploopgoals closets meat when it starts and only takes it back when it finishes.
+//The closet cannot be reached during a fight, so a resume picks up what is left.
+void recoverSteelOrganMeat() {
+    if (get_property("_prusias_ploop_steel_organ_tries").to_int() > 0 && current_round() == 0
+            && my_closet_meat() > 0 && !take_closet(my_closet_meat()))
+        print("ERROR_PLOOP: Could not take the meat back out of the closet.", "red");
 }
 
 void acquireSteelOrganIfNeeded() {
@@ -1401,17 +1430,21 @@ void acquireSteelOrganIfNeeded() {
     cli_execute("refresh all");
     cli_execute("uneffect beaten up");
     print("Trying to get steel organ");
-    if (my_adventures() < 15) {
-        if (item_amount($item[astral six-pack]) > 0) {
-            cli_execute("use astral six-pack");
-        }
-        if (item_amount($item[astral pilsner]) > 0) {
-            cli_execute("cast ode to booze");
-            cli_execute("drink astral pilsner");
-        }
+    //the margarita costs no adventures once Azazel has handed it over
+    if (my_adventures() == 0 && item_amount($item[steel margarita]) == 0) {
+        print("ERROR_PLOOP: No adventures left to get the steel organ.", "red");
+        return;
     }
-    set_property("_prusias_ploop_got_steel_organ", "true");
-    cli_execute("ploopgoals goal organ");
+    fuelAsdon(200);
+    int tries = get_property("_prusias_ploop_steel_organ_tries").to_int() + 1;
+    set_property("_prusias_ploop_steel_organ_tries", tries);
+    if (!cli_execute("ploopgoals goal organ"))
+        print("ERROR_PLOOP: ploopgoals failed on try " + tries + " at the steel organ.", "red");
+    recoverSteelOrganMeat();
+    if (have_skill($skill[Liver of Steel]))
+        set_property("_prusias_ploop_got_steel_organ", "true");
+    else
+        print("ERROR_PLOOP: No Liver of Steel after try " + tries + " at the steel organ.", "red");
 }
 
 //can_adventure is already true while holding the key and the map, before the map is used
@@ -1512,6 +1545,7 @@ void installPostLoopWorkshedIfNeeded() {
 }
 
 void prepareForPostRun() {
+    recoverSteelOrganMeat();
     int prepTurns = 0;
     if (steelOrganNeeded())
         prepTurns += 20;
