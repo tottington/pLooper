@@ -65,6 +65,7 @@ prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes.
 prusias_ploop_nightcapMPA = int
 prusias_ploop_garboAdditionalArg = string - requested Garbo arguments; farmingMethod cowo is omitted for a run when The Coral Corral is unavailable
 prusias_ploop_runBigPieAsdonPrefuel = boolean - opt in to post-run Asdon pie prefueling for all Garbo modes; defaults to false; pies must cost less than 2500 meat, with caps of 1100 fuel and 20000 meat in pie value per day/ascension; Garbo chooses the driving effect and tops off
+prusias_ploop_dropFarmingMethodWhileOverdrunk = boolean
 prusias_ploop_breakfastAdditionalScript = string
 prusias_ploop_preAscendSoybeanFutures = boolean - spend Interesting Coins on soybean futures before ascending, since the coins do not survive the Astral Gash
 prusias_ploop_postDayScript = string
@@ -321,6 +322,7 @@ void optional_help_info() {
     output.append("<b>pLooper options</b><br>Each preference shows its current value. (empty) means no value is set.<br>");
     output.append(ploopHelpSectionHtml("Garbo and loop script") + "<br>");
     output.append(ploopHelpOptionHtml("prusias_ploop_garboAdditionalArg", "Additional arguments to pass to garbo, separated by spaces. Init commands replace this setting with the selected options: cockroach targeting for all inits, plus optional cowo farming for utsinit."));
+    output.append(ploopHelpOptionHtml("prusias_ploop_dropFarmingMethodWhileOverdrunk", "Set to <b>true</b> to drop a <b>farmingMethod</b> argument such as <b>farmingMethod cowo</b> from garbo's arguments while overdrunk, for characters that cannot win Coral Corral fights holding Drunkula's wineglass."));
     output.append(ploopHelpOptionHtml("prusias_ploop_loopScriptClan", "Clan to join immediately before the configured loop script runs. pLooper returns to <b>prusias_ploop_homeClan</b> immediately afterward. Leave empty to stay in the home clan. <b>utsinit</b> prompts for this setting; <b>Bonus Adventures From Hell</b> is recommended for <b>underthesea</b>."));
     output.append(ploopHelpSectionHtml("Custom scripts") + "<br>");
     output.append(ploopHelpOptionHtml("prusias_ploop_breakfastAdditionalScript", "Will cli_execute whatever this property is set to after breakfast."));
@@ -1158,6 +1160,48 @@ void runGarboWithDigitizeRecovery(string command) {
     }
 }
 
+//cowo sends garbo to The Coral Corral, which some overdrunk characters cannot win:
+//Drunkula's wineglass blocks skills and combat items and costs 30 familiar weight.
+//Garbo takes farmingMethod=value or farmingMethod value, and a quoted value can
+//span several words.
+string stripFarmingMethod(string args) {
+    string out;
+    boolean dropValue = false;
+    string openQuote = "";
+    foreach i, part in split_string(args, " ") {
+        if (openQuote != "") {
+            if (part.contains_text(openQuote))
+                openQuote = "";
+            continue;
+        }
+        string lower = part.to_lower_case();
+        if (lower == "farmingmethod") {
+            dropValue = true;
+            continue;
+        }
+        string value = part;
+        if (lower.index_of("farmingmethod=") == 0) {
+            value = part.substring(14);
+            dropValue = true;
+        }
+        if (dropValue) {
+            dropValue = value == "";
+            if (value != "") {
+                string quote = value.substring(0, 1);
+                if ((quote == "\"" || quote == "'") && value.last_index_of(quote) == 0)
+                    openQuote = quote;
+            }
+            continue;
+        }
+        if (part != "") {
+            if (out != "")
+                out += " ";
+            out += part;
+        }
+    }
+    return out;
+}
+
 void garboUsage(string x) {
 	print("trying to run garbo","teal");
     if (have_familiar($familiar[Patriotic Eagle])) {
@@ -1187,8 +1231,15 @@ void garboUsage(string x) {
         garboString += " yachtzeechain";
     if (x != "")
         garboString += " " + x;
-    if (get_property("prusias_ploop_garboAdditionalArg") != "")
-        garboString += " " + get_property("prusias_ploop_garboAdditionalArg");
+    string extraArgs = get_property("prusias_ploop_garboAdditionalArg");
+    if (my_inebriety() > inebriety_limit()
+            && get_property("prusias_ploop_dropFarmingMethodWhileOverdrunk").to_boolean()
+            && extraArgs.to_lower_case().contains_text("farmingmethod")) {
+        extraArgs = stripFarmingMethod(extraArgs);
+        print("Overdrunk, so dropping the farming method from garbo's arguments.", "teal");
+    }
+    if (extraArgs != "")
+        garboString += " " + extraArgs;
     //Ploop's init sets this exact argument. Keep the saved setting for later legs.
     if (garboString.contains_text(" farmingMethod cowo")) {
         if (!get_property("corralUnlocked").to_boolean()) visit_url("seafloor.php");
