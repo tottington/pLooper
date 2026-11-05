@@ -63,6 +63,7 @@ prusias_ploop_postRunMoonTune = int
 prusias_ploop_optOutSmoking = boolean
 prusias_ploop_smokeMessage = string - message for pre-ascension campfire smokes. if empty, uses the default
 prusias_ploop_nightcapMPA = int
+prusias_ploop_topUpAdventures = boolean - top up leg 2 adventures before the steel organ and garbo's PirateRealm voyage, using astral pilsners, then Sacramento wine, then jumping horseradish
 prusias_ploop_garboAdditionalArg = string - requested Garbo arguments; farmingMethod cowo is omitted for a run when The Coral Corral is unavailable
 prusias_ploop_runBigPieAsdonPrefuel = boolean - opt in to post-run Asdon pie prefueling for all Garbo modes; defaults to false; pies must cost less than 2500 meat, with caps of 1100 fuel and 20000 meat in pie value per day/ascension; Garbo chooses the driving effect and tops off
 prusias_ploop_breakfastAdditionalScript = string
@@ -329,6 +330,7 @@ void optional_help_info() {
     output.append(ploopHelpOptionHtml("prusias_ploop_preAscendSoybeanFutures", "Set to true to spend Interesting Coins on soybean futures just before ascending. Coins are quest items and do not survive the Astral Gash, while the food does. Buys as many as the coins on hand cover, and a fresh run hands back 4 coins regardless, so leg 1 of a day is normally holding the 7 one purchase costs."));
     output.append(ploopHelpOptionHtml("prusias_ploop_alwaysSteelOrgan", "Always try to run steel organ. Helpful to set to true if you're running a new path that ploop doesn't know about."));
     output.append(ploopHelpOptionHtml("prusias_ploop_postRunMoonTune", "Set to integer corresponding to moon id. If you have tunes available after the run, will try to tune to this moon sign."));
+    output.append(ploopHelpOptionHtml("prusias_ploop_topUpAdventures", "Set to <b>true</b> to top up adventures on leg 2 before the steel organ (20 turns) and before garbo's PirateRealm voyage when <b>target cockroach</b> is set, since garbo retargets instead of sailing with 40 or fewer adventures and does the voyage before its diet. Drinks astral pilsners, then single Sacramento wines up to <b>valueOfAdventure * 2</b> meat, then eats jumping horseradish up to <b>valueOfAdventure * 3</b> meat, one at a time, stopping at the target so garbo still plans the rest of the diet."));
     output.append(ploopHelpOptionHtml("prusias_ploop_nightcapMPA", "False or empty string will disable. Manually set MPA for nightcapping for those who have an MPA so high, CONSUME will overcap."));
     output.append(ploopHelpOptionHtml("prusias_ploop_smokeMessage", "Message to write with the campfire smokes before ascension. Leave empty for the default. Set it with <b>ploop smokemessage (your message)</b> rather than by hand. 100 character max; <b>%n</b> is replaced with the smoke number and an <b>&amp;</b> becomes <b>and</b>."));
     output.append(ploopHelpOptionHtml("prusias_ploop_optOutSmoking", "Set to <b>true</b> to disable using 4 campfire smokes before ascension when Getaway Campsite is unlocked."));
@@ -1297,8 +1299,106 @@ void postRunNoGarbo() {
     cli_execute('shrug stevedave');
 }
 
+//Drinks one liver point at a time so garbo still plans the rest of the diet.
+//Astral pilsners go first, then Sacramento wine.
+void ensureAdventures(int needed, string why) {
+    if (!get_property("prusias_ploop_topUpAdventures").to_boolean() || my_adventures() >= needed)
+        return;
+    print("Topping up from " + my_adventures() + " to " + needed + " adventures for " + why + ".", "teal");
+    if (item_amount($item[astral six-pack]) > 0 && !use(1, $item[astral six-pack]))
+        print("ERROR_PLOOP: Could not open the astral six-pack.", "red");
+    int winePrice = 2 * get_property("valueOfAdventure").to_int();
+    //the pinky ring adds 12.5% to wine. It never replaces a liver capacity accessory,
+    //and the accessory it replaces goes back afterwards.
+    item pinky = $item[mafia pinky ring];
+    slot pinkySlot = $slot[none];
+    foreach s in $slots[acc3, acc2, acc1] {
+        if (pinkySlot == $slot[none] && numeric_modifier(equipped_item(s), "Liver Capacity") == 0)
+            pinkySlot = s;
+    }
+    item previousAcc = $item[none];
+    boolean pinkySwapped = false;
+    boolean odeGaveUp = false;
+    boolean pilsnersDone = false;
+    int tries = 0;
+    while (my_adventures() < needed && my_inebriety() < inebriety_limit() && tries < 20) {
+        tries += 1;
+        int before = my_adventures();
+        boolean pilsner = !pilsnersDone && item_amount($item[astral pilsner]) > 0;
+        if (!pilsner) {
+            if (winePrice <= 0) {
+                print("ERROR_PLOOP: valueOfAdventure is not set, so no Sacramento wine is bought.", "red");
+                break;
+            }
+            if (item_amount($item[Sacramento wine]) == 0 && buy(1, $item[Sacramento wine], winePrice) == 0) {
+                print("ERROR_PLOOP: Could not buy a Sacramento wine under " + winePrice + " meat.", "red");
+                break;
+            }
+            if (!pinkySwapped && pinkySlot != $slot[none] && !have_equipped(pinky)
+                    && item_amount(pinky) > 0 && can_equip(pinky)) {
+                previousAcc = equipped_item(pinkySlot);
+                pinkySwapped = equip(pinkySlot, pinky);
+                if (my_inebriety() >= inebriety_limit())
+                    break;
+            }
+        }
+        if (!odeGaveUp && have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
+                && !use_skill(1, $skill[The Ode to Booze])) {
+            shrugAT();
+            if (!use_skill(1, $skill[The Ode to Booze])) {
+                odeGaveUp = true;
+                print("Could not cast The Ode to Booze; drinking without it.", "teal");
+            }
+        }
+        //drinksilent skips mafia's Ode and pinky ring confirm dialogs
+        if (!cli_execute("drinksilent 1 " + (pilsner ? "astral pilsner" : "Sacramento wine")))
+            print("ERROR_PLOOP: Could not drink " + (pilsner ? "an astral pilsner" : "a Sacramento wine") + ".", "red");
+        if (my_adventures() <= before) {
+            if (pilsner)
+                pilsnersDone = true;
+            else
+                break;
+        }
+    }
+    if (pinkySwapped && previousAcc != $item[none] && !equip(pinkySlot, previousAcc))
+        print("Could not put " + previousAcc + " back on after the pinky ring.", "teal");
+
+    //with the liver full, eats jumping horseradish one at a time. Mayodiol would turn it into
+    //drunkenness on a full liver, so a Mayodiol in the mouth skips this.
+    int foodPrice = 3 * get_property("valueOfAdventure").to_int();
+    item food = $item[jumping horseradish];
+    tries = 0;
+    while (foodPrice > 0 && get_property("mayoInMouth") != "Mayodiol"
+            && my_adventures() < needed && my_fullness() < fullness_limit() && tries < 20) {
+        tries += 1;
+        int before = my_adventures();
+        if (item_amount(food) == 0 && buy(1, food, foodPrice) == 0) {
+            print("ERROR_PLOOP: Could not buy " + food + " under " + foodPrice + " meat.", "red");
+            break;
+        }
+        //eatsilent skips mafia's milk and mayo confirm dialogs
+        if (!cli_execute("eatsilent 1 " + food))
+            print("ERROR_PLOOP: Could not eat " + food + ".", "red");
+        if (my_adventures() <= before)
+            break;
+    }
+    if (my_adventures() < needed)
+        print("ERROR_PLOOP: Only " + my_adventures() + " of the " + needed + " adventures " + why + " needs.", "red");
+}
+
+//garbo will not start a PirateRealm voyage with 40 or fewer adventures in hand,
+//and does it before its diet, so the top-up has to happen before garbo starts.
+boolean pirateRealmPending() {
+    return get_property("prusias_ploop_garboAdditionalArg").to_lower_case().contains_text("cockroach")
+        && get_property("_lastPirateRealmIsland") != "Trash Island"
+        && my_inebriety() <= inebriety_limit();
+}
+
 void postRun(string x) {
     postRunNoGarbo();
+
+    if (!x.contains_text("nobarf") && pirateRealmPending())
+        ensureAdventures(41, "garbo's PirateRealm voyage");
 
     if (get_property("prusias_ploop_garboPostAscendWorkshed") == "")
         garboUsage(x);
@@ -1431,10 +1531,14 @@ void postAscendScriptCleanup() {
     }
 }
 
+boolean steelOrganNeeded() {
+    return get_property("_prusias_ploop_got_steel_organ") != "true"
+        && (get_property("prusias_ploop_alwaysSteelOrgan").to_boolean()
+            || (steel_organ_paths contains get_property("prusias_ploop_pathId")));
+}
+
 void acquireSteelOrganIfNeeded() {
-    if (get_property("_prusias_ploop_got_steel_organ") == "true"
-            || (!get_property("prusias_ploop_alwaysSteelOrgan").to_boolean()
-                && !(steel_organ_paths contains get_property("prusias_ploop_pathId")))) {
+    if (!steelOrganNeeded()) {
         return;
     }
 
@@ -1476,6 +1580,8 @@ void installPostLoopWorkshedIfNeeded() {
 }
 
 void prepareForPostRun() {
+    if (steelOrganNeeded())
+        ensureAdventures(20, "the steel organ");
     acquireSteelOrganIfNeeded();
     tunePostRunMoonIfNeeded();
     returnClanStashItems();
