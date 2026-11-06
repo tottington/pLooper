@@ -1469,6 +1469,33 @@ void recoverSteelOrganMeat() {
         print("ERROR_PLOOP: Could not take the meat back out of the closet.", "red");
 }
 
+//Opens an astral six-pack and drinks astral pilsners one at a time, under Ode, until
+//there are `needed` adventures, the liver is full or the pilsners run out.
+void drinkAstralPilsnersUntil(int needed) {
+    if (my_adventures() >= needed)
+        return;
+    if (item_amount($item[astral six-pack]) > 0 && !use(1, $item[astral six-pack]))
+        print("Could not open the astral six-pack.", "teal");
+    boolean odeGaveUp = false;
+    while (my_adventures() < needed && item_amount($item[astral pilsner]) > 0
+            && my_inebriety() < inebriety_limit()) {
+        int before = my_adventures();
+        if (!odeGaveUp && have_skill($skill[The Ode to Booze]) && have_effect($effect[Ode to Booze]) == 0
+                && !use_skill(1, $skill[The Ode to Booze])) {
+            shrugAT();
+            if (!use_skill(1, $skill[The Ode to Booze])) {
+                odeGaveUp = true;
+                print("Could not cast The Ode to Booze; drinking without it.", "teal");
+            }
+        }
+        //drinksilent skips mafia's Ode confirm dialog
+        if (!cli_execute("drinksilent 1 astral pilsner") || my_adventures() <= before) {
+            print("Could not drink an astral pilsner.", "teal");
+            break;
+        }
+    }
+}
+
 void acquireSteelOrganIfNeeded() {
     if (!steelOrganNeeded()) {
         return;
@@ -1478,17 +1505,7 @@ void acquireSteelOrganIfNeeded() {
     cli_execute("refresh all");
     cli_execute("uneffect beaten up");
     print("Trying to get steel organ");
-    if (my_adventures() < 15) {
-        if (item_amount($item[astral six-pack]) > 0 && !cli_execute("use astral six-pack"))
-            print("Could not open the astral six-pack.", "teal");
-        if (item_amount($item[astral pilsner]) > 0 && my_inebriety() < inebriety_limit()) {
-            if (!cli_execute("cast ode to booze"))
-                print("Could not cast The Ode to Booze; drinking without it.", "teal");
-            //drinksilent skips mafia's Ode confirm dialog
-            if (!cli_execute("drinksilent 1 astral pilsner"))
-                print("Could not drink an astral pilsner.", "teal");
-        }
-    }
+    drinkAstralPilsnersUntil(15);
     //the margarita costs no adventures once Azazel has handed it over
     if (my_adventures() == 0 && item_amount($item[steel margarita]) == 0) {
         print("ERROR_PLOOP: No adventures left to get the steel organ.", "red");
@@ -1534,17 +1551,8 @@ void openKnobTreasury() {
 
     print("Opening the Knob Treasury", "teal");
     item key = $item[Knob Goblin encryption key];
-    if (item_amount(key) == 0 && my_adventures() < 11) {
-        if (item_amount($item[astral six-pack]) > 0 && !cli_execute("use astral six-pack"))
-            print("Could not open the astral six-pack.", "teal");
-        if (item_amount($item[astral pilsner]) > 0 && my_inebriety() < inebriety_limit()) {
-            if (!cli_execute("cast ode to booze"))
-                print("Could not cast The Ode to Booze; drinking without it.", "teal");
-            //drinksilent skips mafia's Ode confirm dialog
-            if (!cli_execute("drinksilent 1 astral pilsner"))
-                print("Could not drink an astral pilsner.", "teal");
-        }
-    }
+    if (item_amount(key) == 0)
+        drinkAstralPilsnersUntil(11);
 
     string[int] choices = {111: "3", 113: "2", 118: "1"};
     string[int] savedChoices;
