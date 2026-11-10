@@ -1362,7 +1362,7 @@ void removeOrganCapacityGear() {
         item it = equipped_item(s);
         if ((numeric_modifier(it, "Liver Capacity") > 0 || numeric_modifier(it, "Stomach Capacity") > 0
                 || numeric_modifier(it, "Spleen Capacity") > 0) && !equip(s, $item[none]))
-            print("Could not take off " + it + ".", "teal");
+            print("ERROR_PLOOP: Could not take off " + it + ".", "red");
     }
 }
 
@@ -1371,6 +1371,8 @@ void removeOrganCapacityGear() {
 //A failure after the overdrink returns so the caller can finish the day.
 void consumeNightcap(string value) {
     int baseLiver = inebriety_limit();
+    foreach s in $slots[hat, weapon, off-hand, back, shirt, pants, acc1, acc2, acc3]
+        baseLiver -= numeric_modifier(equipped_item(s), "Liver Capacity").to_int();
     equipOrganCapacityGear();
     if (cli_execute("CONSUME ALL NIGHTCAP VALUE " + value))
         return;
