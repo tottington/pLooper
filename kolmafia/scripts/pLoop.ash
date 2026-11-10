@@ -1502,6 +1502,76 @@ void nightcapFamiliar() {
     }
 }
 
+//Equips the gear that raises liver, stomach and spleen capacity, so a nightcap fills
+//the extra space. Without such gear the limits stay as they are.
+void equipOrganCapacityGear() {
+    int liver = inebriety_limit();
+    int stomach = fullness_limit();
+    int spleen = spleen_limit();
+    if (!maximize("Liver Capacity, Stomach Capacity, Spleen Capacity, -tie", false)) {
+        print("Could not equip organ capacity gear.", "teal");
+        return;
+    }
+    if (inebriety_limit() > liver || fullness_limit() > stomach || spleen_limit() > spleen)
+        print("Organ capacity gear on: liver " + liver + " to " + inebriety_limit()
+            + ", stomach " + stomach + " to " + fullness_limit()
+            + ", spleen " + spleen + " to " + spleen_limit() + ".", "teal");
+}
+
+void removeOrganCapacityGear() {
+    foreach s in $slots[hat, weapon, off-hand, back, shirt, pants, acc1, acc2, acc3] {
+        item it = equipped_item(s);
+        if ((numeric_modifier(it, "Liver Capacity") > 0 || numeric_modifier(it, "Stomach Capacity") > 0
+                || numeric_modifier(it, "Spleen Capacity") > 0) && !equip(s, $item[none]))
+            print("ERROR_PLOOP: Could not take off " + it + ".", "red");
+    }
+}
+
+//Runs CONSUME's nightcap with the organ capacity gear on. A failure before the overdrink
+//takes the gear back off, unless the extra liver is already in use, and stops the script.
+//A failure after the overdrink returns so the caller can finish the day.
+void consumeNightcap(string value) {
+    int baseLiver = inebriety_limit();
+    foreach s in $slots[hat, weapon, off-hand, back, shirt, pants, acc1, acc2, acc3]
+        baseLiver -= numeric_modifier(equipped_item(s), "Liver Capacity").to_int();
+    equipOrganCapacityGear();
+    if (cli_execute("CONSUME ALL NIGHTCAP VALUE " + value))
+        return;
+    if (my_inebriety() > inebriety_limit()) {
+        print("ERROR_PLOOP: CONSUME failed after the nightcap drink.", "red");
+        return;
+    }
+    if (my_inebriety() <= baseLiver)
+        removeOrganCapacityGear();
+    print("ERROR_PLOOP: CONSUME failed before the nightcap drink, at " + my_inebriety() + "/" + inebriety_limit() + ".", "red");
+    abort();
+}
+
+void wearNightcapOutfit() {
+	//burning cape
+	if (available_amount($item[burning cape]) > 0) {
+		cli_execute("equip burning cape");
+    } else if (mall_price( $item[ Burning Newspaper ] ) < (get_property("valueOfAdventure").to_int())) {
+        if (available_amount($item[burning newspaper]) == 0) {
+            cli_execute("buy 1 burning newspaper @" + get_property("valueOfAdventure").to_int());
+        }
+        cli_execute("make burning cape");
+        cli_execute("equip burning cape");
+    }
+
+    // Nightcap outfit
+    foreach key,piece in outfit_pieces(get_property("prusias_ploop_nightcapOutfit")) {
+        if (piece == $item[stinky cheese diaper] && available_amount($item[stinky cheese diaper]) == 0) {
+            cli_execute("fold stinky cheese diaper");
+        } else if (piece == $item[loathing legion knife] && available_amount($item[loathing legion knife]) == 0) {
+            cli_execute("fold loathing legion knife");
+        }
+    }
+    cli_execute("outfit " + get_property("prusias_ploop_nightcapOutfit"));
+	if (available_amount($item[burning cape]) > 0) 
+		cli_execute("equip burning cape");
+}
+
 void nightcap() {
     //Handle maids
     int profitOffset = 100;
@@ -1539,42 +1609,22 @@ void nightcap() {
         }
         use_familiar($familiar[Stooper]);
     }
-	//burning cape
-	if (available_amount($item[burning cape]) > 0) {
-		cli_execute("equip burning cape");
-    } else if (mall_price( $item[ Burning Newspaper ] ) < (get_property("valueOfAdventure").to_int())) {
-        if (available_amount($item[burning newspaper]) == 0) {
-            cli_execute("buy 1 burning newspaper @" + get_property("valueOfAdventure").to_int());
-        }
-        cli_execute("make burning cape");
-        cli_execute("equip burning cape");
-    }
-
-    // Nightcap outfit
-    foreach key,piece in outfit_pieces(get_property("prusias_ploop_nightcapOutfit")) {
-        if (piece == $item[stinky cheese diaper] && available_amount($item[stinky cheese diaper]) == 0) {
-            cli_execute("fold stinky cheese diaper");
-        } else if (piece == $item[loathing legion knife] && available_amount($item[loathing legion knife]) == 0) {
-            cli_execute("fold loathing legion knife");
-        }
-    }
-    cli_execute("outfit " + get_property("prusias_ploop_nightcapOutfit"));
-	if (available_amount($item[burning cape]) > 0) 
-		cli_execute("equip burning cape");
-    
     //nightcapping
     //cli_execute("CONSUME ALL NIGHTCAP VALUE " + get_property("valueOfAdventure").to_int());
     if (my_inebriety() <= inebriety_limit()) {
         if (get_property("prusias_ploop_nightcapMPA") == "" || get_property("prusias_ploop_nightcapMPA").to_string().to_lower_case() == "false") {
-            cli_execute("CONSUME ALL NIGHTCAP VALUE " + (get_property("valueOfAdventure").to_int()));
+            consumeNightcap(get_property("valueOfAdventure").to_int().to_string());
         } else {
-            cli_execute("CONSUME ALL NIGHTCAP VALUE " + get_property("prusias_ploop_nightcapMPA").to_int());
+            consumeNightcap(get_property("prusias_ploop_nightcapMPA").to_int().to_string());
         }
     } else {
+        wearNightcapOutfit();
         nightcapFamiliar();
         print("ERROR_PLOOP: Nightcap started overdrunk at " + my_inebriety() + "/" + inebriety_limit());
         abort();
     }
+    //The outfit goes on after the drink. It can take off liver capacity gear.
+    wearNightcapOutfit();
     nightcapFamiliar();
     
     
@@ -1893,7 +1943,7 @@ void runPreAscensionPhase(boolean halloween) {
         print("Breakfast leg end of day, overdrunk with wineglass", "teal");
         if (my_inebriety() == inebriety_limit() && my_familiar() == $familiar[Stooper]) {
             string nightcapValue = halloween ? "9999" : (get_property("valueOfAdventure").to_int()/2).to_string();
-            cli_execute("CONSUME ALL NIGHTCAP VALUE " + nightcapValue);
+            consumeNightcap(nightcapValue);
         }
 
         prepPvp();
@@ -1924,7 +1974,7 @@ void runPreAscensionPhase(boolean halloween) {
     }
 
     print("Breakfast leg end of day, overdrunk WITHOUT wineglass", "teal");
-    cli_execute("CONSUME ALL NIGHTCAP VALUE 100");
+    consumeNightcap("100");
     useCombo();
 
     if (halloween) {
